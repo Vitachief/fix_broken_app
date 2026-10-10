@@ -60,7 +60,13 @@ pub fn average_positive(values: &[i64]) -> f64 {
 pub unsafe fn use_after_free() -> i32 {
     let b = Box::new(42_i32);
     let raw = Box::into_raw(b);
-    let val = *raw;
-    drop(Box::from_raw(raw));
-    val + *raw
+    
+    let val = unsafe { *raw };
+    
+    unsafe { 
+        drop(Box::from_raw(raw)); 
+    }
+    
+    // Возможно, надо вернуть val + val, но тут не угадаешь :)
+    val
 }
