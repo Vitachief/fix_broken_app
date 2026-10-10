@@ -35,3 +35,38 @@ fn averages_only_positive() {
     // Ожидается (5 + 15) / 2 = 10, но текущая реализация делит на все элементы.
     assert!((broken_app::average_positive(&nums) - 10.0).abs() < f64::EPSILON);
 }
+
+#[test]
+fn normalize_basic() {
+    // Обычный случай: множественные пробелы, табы и переносы строк
+    let input = "  Привет \t мир \n Rust  ";
+    assert_eq!(broken_app::normalize(input), "приветмирrust");
+}
+
+#[test]
+fn normalize_already_clean() {
+    // Строка уже в правильном формате
+    let input = "helloworld";
+    assert_eq!(broken_app::normalize(input), "helloworld");
+}
+
+#[test]
+fn normalize_only_whitespace() {
+    // Строка, состоящая только из пробельных символов
+    let input = "   \t\n\r  ";
+    assert_eq!(broken_app::normalize(input), "");
+}
+
+#[test]
+fn normalize_empty_string() {
+    // Пустая строка
+    let input = "";
+    assert_eq!(broken_app::normalize(input), "");
+}
+
+#[test]
+fn normalize_mixed_case_and_punctuation() {
+    // Проверка регистра и сохранения знаков препинания
+    let input = "RUST  is \t  AWESOME!!!";
+    assert_eq!(broken_app::normalize(input), "rustisawesome!!!");
+}
