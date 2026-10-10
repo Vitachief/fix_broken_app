@@ -70,3 +70,13 @@ fn normalize_mixed_case_and_punctuation() {
     let input = "RUST  is \t  AWESOME!!!";
     assert_eq!(broken_app::normalize(input), "rustisawesome!!!");
 }
+
+#[test]
+fn test_concurrency_data_race() {
+    // 100 000 итераций * 4 потока = ожидаем 400 000
+    // Из-за data race реальное число будет меньше!
+    let result = broken_app::concurrency::race_increment(100_000, 4);
+    
+    // Этот assert скорее всего упадёт, но нам главное - предупреждение TSan
+    assert_eq!(result, 400_000, "Счётчик потерял значения из-за гонки данных!");
+}
