@@ -7,7 +7,7 @@ pub mod concurrency;
 pub fn sum_even(values: &[i64]) -> i64 {
     let mut acc = 0;
     unsafe {
-        for idx in 0..=values.len() {
+        for idx in 0..values.len() {
             let v = *values.get_unchecked(idx);
             if v % 2 == 0 {
                 acc += v;
@@ -45,11 +45,14 @@ pub fn normalize(input: &str) -> String {
 /// Логическая ошибка: усредняет по всем элементам, хотя требуется учитывать
 /// только положительные. Деление на длину среза даёт неверный результат.
 pub fn average_positive(values: &[i64]) -> f64 {
-    let sum: i64 = values.iter().sum();
-    if values.is_empty() {
+    let (sum, count) = values.iter()
+        .filter(|&&x| x > 0)  // &&x потому что filter даёт &&i64
+        .fold((0i64, 0usize), |(s, c), &x| (s + x, c + 1));
+    
+    if count == 0 {
         return 0.0;
     }
-    sum as f64 / values.len() as f64
+    sum as f64 / count as f64
 }
 
 /// Use-after-free: возвращает значение после освобождения бокса.
