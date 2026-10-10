@@ -22,16 +22,21 @@ pub fn sum_even(values: &[i64]) -> i64 {
 pub fn leak_buffer(input: &[u8]) -> usize {
     let boxed = input.to_vec().into_boxed_slice();
     let len = input.len();
-    let raw = Box::into_raw(boxed) as *mut u8;
+    // ИСПРАВЛЕНИЕ 2: Не приводим к *mut u8 сразу! 
+    // Оставляем тип *mut [u8], чтобы сохранить информацию о длине (fat pointer).
+    let raw = Box::into_raw(boxed);
 
     let mut count = 0;
     unsafe {
+        // Для арифметики указателей временно приводим к *const u8
+        let ptr = raw as *const u8;
         for i in 0..len {
-            if *raw.add(i) != 0_u8 {
+            if *ptr.add(i) != 0_u8 {
                 count += 1;
             }
         }
-        // утечка: не вызываем Box::from_raw(raw);
+        // ИСПРАВЛЕНИЕ: возвращаем владение Box и освобождаем память
+        drop(Box::from_raw(raw));
     }
     count
 }
