@@ -74,15 +74,42 @@ drop(Box::from_raw(raw));
 val + *raw  // BUG: чтение после освобождения
 ```
 
-**Исправление:**
+### Обнаружение
 
-```rust
-let val = unsafe { *raw };
-unsafe { drop(Box::from_raw(raw)); }
-val  // FIX: возвращаем сохранённое значение, без повторного чтения
+**1. Miri (интерпретатор UB):**
+
+При запуске `cargo +nightly miri test` Miri однозначно указал на Undefined Behavior:
+
+```text
+error: Undefined Behavior: trying to reborrow for Unique borrow at alloc84313,
+but parent tag <207234> does not have an appropriate item in the borrow stack
+  --> src/lib.rs:62:11
+   |
+62 |     val + *raw
+   |           ^^^^ trying to reborrow for Unique borrow
 ```
 
----
+**2. Предупреждения компилятора (E0133):**
+
+Компилятор Rust требовал явных блоков `unsafe {}` для каждой unsafe-операции
+
+```text
+warning[E0133]: dereference of raw pointer is unsafe and requires unsafe block
+  --> src/lib.rs:60:15
+   |
+60 |     let val = *raw;
+   |               ^^^^ dereference of raw pointer
+
+warning[E0133]: dereference of raw pointer is unsafe and requires unsafe block
+  --> src/lib.rs:62:11
+   |
+62 |     val + *raw
+   |           ^^^^ dereference of raw pointer
+```
+
+**Исправление:**
+
+Убрано повторное чтение. Добавлен тест на проверку возвращаемого значения, но поскольку UB - это UB, гарантии отсутствия тест не даёт.
 
 ## Баг 4: Логическая ошибка в `average_positive`
 
@@ -101,13 +128,7 @@ assertion failed: (broken_app::average_positive(&nums) - 10.0).abs() < f64::EPSI
 
 **Исправление:**
 
-```rust
-let (sum, count) = values.iter()
-    .filter(|&&x| x > 0)
-    .fold((0i64, 0usize), |(s, c), &x| (s + x, c + 1));
-if count == 0 { return 0.0; }
-sum as f64 / count as f64  // FIX: делим на количество положительных
-```
+Сохраняем только положительные числа и делим на их количество. Тесты не изменялись.
 
 ---
 
@@ -121,35 +142,7 @@ input.replace(' ', "").to_lowercase()  // BUG: только обычные пр�
 
 **Исправление:**
 
-```rust
-input
-    .split_whitespace()  // FIX: любые пробельные символы
-    .collect::<Vec<&str>>()
-    .join(" ")           // FIX: схлопывание в один пробел
-    .to_lowercase()
-```
-
-**Регрессионные тесты:**
-
-```rust
-#[test]
-fn normalize_basic() {
-    assert_eq!(
-        broken_app::normalize("  Привет \t мир \n Rust  "),
-        "привет мир rust"
-    );
-}
-
-#[test]
-fn normalize_only_whitespace() {
-    assert_eq!(broken_app::normalize("   \t\n\r  "), "");
-}
-
-#[test]
-fn normalize_empty_string() {
-    assert_eq!(broken_app::normalize(""), "");
-}
-```
+replace исправлен на split_workspace, Добавлены регрессионные тесты normalize_basic, normalize_only_whitespace, normalize_empty_string.
 
 ---
 
@@ -175,36 +168,15 @@ pub fn race_increment(iterations: usize, threads: usize) -> u64 {
 }
 ```
 
-**Обнаружение (логический тест):**
+**Исправление:**
+ 
+ Переход на Atomic. Добавлен тест test_concurrency_data_race, инкрементирующий счётчик большое количество раз - при гонке данных какое-то значение будет потерено.
 
-```text
+ Вывод теста до исправления
+ ```text
 assertion `left == right` failed: Счётчик потерял значения из-за гонки данных!
   left: 72551
  right: 400000
 ```
 
 Потеряно ~82% инкрементов из-за того, что `COUNTER += 1` состоит из трёх неатомарных шагов (чтение, инкремент, запись), и параллельные потоки перезаписывают результаты друг друга.
-
-**Исправление:**
-
-```rust
-use std::sync::atomic::{AtomicU64, Ordering};
-
-static COUNTER: AtomicU64 = AtomicU64::new(0);
-
-pub fn race_increment(iterations: usize, threads: usize) -> u64 {
-    COUNTER.store(0, Ordering::SeqCst);
-    let mut handles = Vec::new();
-    for _ in 0..threads {
-        handles.push(thread::spawn(move || {
-            for _ in 0..iterations {
-                COUNTER.fetch_add(1, Ordering::SeqCst);  // FIX: атомарно
-            }
-        }));
-    }
-    for h in handles { let _ = h.join(); }
-    COUNTER.load(Ordering::SeqCst)
-}
-```
-
-**Подтверждение:** Тест `test_concurrency_data_race` возвращает ровно 400 000.
